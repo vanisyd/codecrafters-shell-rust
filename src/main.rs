@@ -25,14 +25,41 @@ impl Command for Exit {
     }
 }
 
+struct TypeCmd {
+    arg: Vec<String>
+}
+
+impl TypeCmd {
+    fn new(arg: Vec<String>) -> Self {
+        Self {
+            arg
+        }
+    }
+}
+
+impl Command for TypeCmd {
+    fn exec(&mut self) {
+        if parse_command(self.arg.iter().map(|s| s.as_str()).collect()).is_some() {
+            println!("{} is a shell builtin", self.arg[0])
+        } else {
+            println!("{}: not found", self.arg.join(" "))
+        }
+    }
+}
+
 trait Command {
     fn exec(&mut self);
 }
 
-fn parse_command(args: Vec<&str>) -> Option<impl Command> {
+fn parse_command(args: Vec<&str>) -> Option<Box<dyn Command>> {
     let cmd_name = *args.get(0)?;
+
     match cmd_name {
-        "echo" => Some(Echo::new(args[1..].to_owned().join(" "))),
+        "echo" => Some(Box::new(Echo::new(args[1..].join(" ")))),
+        "type" => {
+            let cmd_arg = args[1..].iter().map(|&s| s.to_string()).collect();
+            Some(Box::new(TypeCmd::new(cmd_arg)))
+        },
         _ => None
     }
 }
