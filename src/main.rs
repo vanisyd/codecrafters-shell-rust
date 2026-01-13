@@ -60,6 +60,7 @@ fn parse_command(args: Vec<&str>) -> Option<Box<dyn Command>> {
             let cmd_arg = args[1..].iter().map(|&s| s.to_string()).collect();
             Some(Box::new(TypeCmd::new(cmd_arg)))
         },
+        "exit" => Some(Box::new(Exit {})),
         _ => None
     }
 }
