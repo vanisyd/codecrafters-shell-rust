@@ -1,95 +1,53 @@
+mod builtin;
+mod helper;
+
+use std::env;
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use crate::builtin::call_builtin;
 
-struct Echo {
-    text: String
+enum ShellSignal {
+    Exit
 }
-impl Echo {
-    fn new(text: String) -> Self {
-        Self {
-            text
+
+#[derive(Default)]
+struct ShellState {
+    should_exit: bool
+}
+
+impl ShellState {
+    pub fn update(&mut self, signal: ShellSignal) {
+        match signal {
+            ShellSignal::Exit => self.should_exit = true,
         }
-    }
-}
-impl Command for Echo {
-    fn exec(&mut self) {
-        println!("{}", self.text);
-        io::stdout().flush().unwrap();
-    }
-}
-
-struct Exit {}
-impl Command for Exit {
-    fn exec(&mut self) {
-        todo!()
-    }
-}
-
-struct TypeCmd {
-    arg: Vec<String>
-}
-
-impl TypeCmd {
-    fn new(arg: Vec<String>) -> Self {
-        Self {
-            arg
-        }
-    }
-}
-
-impl Command for TypeCmd {
-    fn exec(&mut self) {
-        if parse_command(self.arg.iter().map(|s| s.as_str()).collect()).is_some() {
-            println!("{} is a shell builtin", self.arg[0])
-        } else {
-            println!("{}: not found", self.arg.join(" "))
-        }
-    }
-}
-
-trait Command {
-    fn exec(&mut self);
-}
-
-fn parse_command(args: Vec<&str>) -> Option<Box<dyn Command>> {
-    let cmd_name = *args.get(0)?;
-
-    match cmd_name {
-        "echo" => Some(Box::new(Echo::new(args[1..].join(" ")))),
-        "type" => {
-            let cmd_arg = args[1..].iter().map(|&s| s.to_string()).collect();
-            Some(Box::new(TypeCmd::new(cmd_arg)))
-        },
-        "exit" => Some(Box::new(Exit {})),
-        _ => None
     }
 }
 
 fn main() {
-    print!("$ ");
-    io::stdout().flush().unwrap();
+    let mut state = ShellState::default();
 
     let mut input = String::new();
+    while !state.should_exit {
+        print!("$ ");
+        io::stdout().flush().unwrap();
 
-    loop {
         io::stdin().read_line(&mut input).unwrap();
         input = input.trim().to_string();
-        if input == "exit" {
-            break
-        } else {
-            let args: Vec<&str> = input.split_whitespace().collect();
-            match parse_command(args) {
-                Some(mut cmd) => cmd.exec(),
-                None => {
-                    println!("{input}: command not found");
-                }
-            }
 
-            print!("$ ");
-            io::stdout().flush().unwrap();
+        let parts: Vec<&str> = input.split_whitespace().collect();
+
+        if let Some(cmd_name) = parts.first() {
+            let args: &[&str] = &parts[1..];
+            if let Ok(result) = call_builtin(&mut state, cmd_name, args, io::stdout().by_ref()) {
+                if let Some(signal) = result {
+                    state.update(signal);
+                }
+            } else {
+                println!("{cmd_name}: command not found");
+                io::stdout().flush().unwrap();
+            }
         }
+
         input.clear();
     }
-
-    io::stdout().flush().unwrap();
 }
