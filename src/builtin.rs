@@ -56,7 +56,7 @@ impl Command for TypeCmd {
             let builtin = BUILTINS.iter().
                 find(|cmd| cmd.name() == arg);
             if builtin.is_some() {
-                writeln!(output, "{} is shell builtin", arg)?;
+                writeln!(output, "{} is a shell builtin", arg)?;
                 continue 'arg_loop
             }
 
