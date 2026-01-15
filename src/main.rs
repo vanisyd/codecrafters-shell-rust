@@ -62,7 +62,7 @@ fn main() {
 
     let mut input = String::new();
     while !state.should_exit {
-        print!("{} $ ", state.current_dir.display());
+        print!("$ ");
         io::stdout().flush().unwrap();
 
         io::stdin().read_line(&mut input).unwrap();
