@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use crate::helper::is_executable;
 use crate::{ShellSignal, ShellState};
 
-pub fn get_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
+pub fn find_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
     let mut app_path: PathBuf = path.unwrap_or_else(|| PathBuf::from("/"));
 
     if name.starts_with("./") {
@@ -21,6 +21,33 @@ pub fn get_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
                 if is_executable(&full_path) {
                     app_path = full_path;
                     break
+                }
+            };
+        }
+    }
+
+    if !is_executable(&app_path) {
+        return None
+    }
+
+    Some(app_path)
+}
+
+//Codecrafters tests don't work if app that in $PATH executed by full path
+pub fn get_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
+    let mut app_path: PathBuf = path.unwrap_or_else(|| PathBuf::from("/"));
+
+    if name.starts_with("./") {
+        app_path = app_path.join(name[2..].to_owned());
+    } else if name.starts_with(std::path::MAIN_SEPARATOR) {
+        app_path = PathBuf::from(name);
+    } else {
+        if let Some(path_var) = env::var_os("PATH") {
+            let paths = env::split_paths(&path_var);
+            for path in paths {
+                let full_path = path.join(name);
+                if is_executable(&full_path) {
+                    return Some(PathBuf::from(name));
                 }
             };
         }

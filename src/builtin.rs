@@ -3,7 +3,7 @@ use std::result::Result::Err;
 use std::{env, io};
 use std::io::{Write};
 use crate::{ShellSignal, ShellState};
-use crate::external::{call_external, get_external};
+use crate::external::{call_external, find_external, get_external};
 
 pub trait ShellCommand: Sync {
     fn name(&self) -> &'static str;
@@ -59,7 +59,7 @@ impl ShellCommand for TypeCmd {
                 continue 'arg_loop
             }
 
-            if let Some(external) = get_external(arg, None) {
+            if let Some(external) = find_external(arg, None) {
                 writeln!(output, "{} is {}", arg, external.display())?;
                 continue 'arg_loop
             }
