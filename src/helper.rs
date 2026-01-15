@@ -1,7 +1,7 @@
 use std::fs::DirEntry;
-use std::{fs, io};
+use std::{env, fs, io};
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn visit_dirs<T, R>(dir: &Path, cb: &mut T) -> io::Result<Option<R>>
 where

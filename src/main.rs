@@ -1,10 +1,10 @@
 mod builtin;
 mod helper;
 
-use std::env;
 #[allow(unused_imports)]
+#[allow(dead_code)]
 use std::io::{self, Write};
-use crate::builtin::{call, call_builtin};
+use crate::builtin::{call};
 
 enum ShellSignal {
     Exit

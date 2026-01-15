@@ -22,7 +22,7 @@ impl ShellCommand for Echo {
         "echo"
     }
 
-    fn exec(&self, state: &ShellState, args: &[&str], output: &mut dyn Write)
+    fn exec(&self, _state: &ShellState, args: &[&str], output: &mut dyn Write)
         -> io::Result<Option<ShellSignal>>
     {
         writeln!(output, "{}", args.join(" "))?;
@@ -38,7 +38,7 @@ impl ShellCommand for Exit {
         "exit"
     }
 
-    fn exec(&self, state: &ShellState, args: &[&str], output: &mut dyn Write)
+    fn exec(&self, _state: &ShellState, _args: &[&str], _output: &mut dyn Write)
             -> io::Result<Option<ShellSignal>>
     {
         Ok(Some(ShellSignal::Exit))
@@ -118,7 +118,9 @@ pub fn get_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
 pub fn call_external(_state: &ShellState, path: &Path, args: &[&str], output: &mut dyn Write)
     -> io::Result<Option<ShellSignal>>
 {
-    let mut cmd = Command::new(path)
+    // Codecrafters tests this in a rly weird way, so the tests cannot be passed if in-PATH app executed by full path
+    let newpath = PathBuf::from(path.file_name().unwrap());
+    let mut cmd = Command::new(newpath)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
