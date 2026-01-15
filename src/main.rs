@@ -4,7 +4,7 @@ mod helper;
 use std::env;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use crate::builtin::call_builtin;
+use crate::builtin::{call, call_builtin};
 
 enum ShellSignal {
     Exit
@@ -38,16 +38,16 @@ fn main() {
 
         if let Some(cmd_name) = parts.first() {
             let args: &[&str] = &parts[1..];
-            if let Ok(result) = call_builtin(&mut state, cmd_name, args, io::stdout().by_ref()) {
+            if let Ok(result) = call(&mut state, cmd_name, args, io::stdout().by_ref()) {
                 if let Some(signal) = result {
                     state.update(signal);
                 }
             } else {
                 println!("{cmd_name}: command not found");
-                io::stdout().flush().unwrap();
             }
         }
 
+        io::stdout().flush().unwrap();
         input.clear();
     }
 }
