@@ -1,6 +1,8 @@
 mod builtin;
 mod helper;
+mod external;
 
+use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use std::io::{self, Write};
@@ -10,9 +12,24 @@ enum ShellSignal {
     Exit
 }
 
-#[derive(Default)]
 struct ShellState {
+    current_dir: String,
     should_exit: bool
+}
+
+impl Default for ShellState {
+    fn default() -> Self {
+        let current_dir = if let Some(home) = env::var_os("HOME") {
+            home.into_string().unwrap()
+        } else {
+            "/".to_string()
+        };
+
+        Self {
+            current_dir,
+            should_exit: false
+        }
+    }
 }
 
 impl ShellState {

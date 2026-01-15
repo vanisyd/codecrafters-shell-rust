@@ -1,0 +1,79 @@
+use std::{env, io, thread};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use crate::helper::is_executable;
+use crate::{ShellSignal, ShellState};
+
+pub fn get_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
+    let mut app_path: PathBuf = path.unwrap_or_else(|| PathBuf::from("/"));
+
+    if name.starts_with("./") {
+        app_path = app_path.join(name[2..].to_owned());
+    } else if name.starts_with(std::path::MAIN_SEPARATOR) {
+        app_path = PathBuf::from(name);
+    } else {
+        if let Some(path_var) = env::var_os("PATH") {
+            let paths = env::split_paths(&path_var);
+            for path in paths {
+                let full_path = path.join(name);
+                if is_executable(&full_path) {
+                    app_path = full_path;
+                    break
+                }
+            };
+        }
+    }
+
+    if !is_executable(&app_path) {
+        return None
+    }
+
+    Some(app_path)
+}
+
+pub fn call_external(_state: &ShellState, path: &Path, args: &[&str], output: &mut dyn Write)
+                     -> io::Result<Option<ShellSignal>>
+{
+    let mut cmd = Command::new(path)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let mut stdout = cmd.stdout.take().unwrap();
+    let mut stderr = cmd.stderr.take().unwrap();
+
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+
+    {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = stdout.read(&mut buf) {
+                if n == 0 { break }
+                tx.send(buf[..n].to_vec()).unwrap();
+            }
+        });
+    }
+
+    {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = stderr.read(&mut buf) {
+                if n == 0 { break }
+                tx.send(buf[..n].to_vec()).unwrap();
+            }
+        });
+    }
+    drop(tx);
+
+    for chunk in rx {
+        output.write_all(&chunk)?;
+    }
+
+    cmd.wait()?;
+    Ok(None)
+}
