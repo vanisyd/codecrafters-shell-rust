@@ -6,6 +6,7 @@ use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use std::io::{self, Write};
+use std::path::PathBuf;
 use crate::builtin::{call};
 
 enum ShellSignal {
@@ -13,16 +14,16 @@ enum ShellSignal {
 }
 
 struct ShellState {
-    current_dir: String,
+    current_dir: PathBuf,
     should_exit: bool
 }
 
 impl Default for ShellState {
     fn default() -> Self {
-        let current_dir = if let Some(home) = env::var_os("HOME") {
-            home.into_string().unwrap()
+        let current_dir = if let Ok(cur_dir) = env::current_dir() {
+            cur_dir
         } else {
-            "/".to_string()
+            PathBuf::from("/")
         };
 
         Self {

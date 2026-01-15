@@ -79,7 +79,7 @@ impl ShellCommand for Pwd {
     }
 
     fn exec(&self, state: &ShellState, args: &[&str], output: &mut dyn Write) -> io::Result<Option<ShellSignal>> {
-        writeln!(output, "{}", state.current_dir)?;
+        writeln!(output, "{}", state.current_dir.display())?;
         Ok(None)
     }
 }
@@ -88,6 +88,7 @@ static BUILTINS: &[&dyn ShellCommand] = &[
     &ECHO,
     &EXIT,
     &TYPECMD,
+    &PWD,
 ];
 
 pub fn call_builtin(state: &ShellState, cmd: &dyn ShellCommand, args: &[&str], output: &mut dyn Write)
