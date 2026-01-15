@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use crate::helper::is_executable;
-use crate::{ShellSignal, ShellState};
+use crate::{ShellError, ShellSignal, ShellState};
 
 pub fn find_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
     let mut app_path: PathBuf = path.unwrap_or_else(|| PathBuf::from("/"));
@@ -61,13 +61,13 @@ pub fn get_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
 }
 
 pub fn call_external(_state: &ShellState, path: &Path, args: &[&str], output: &mut dyn Write)
-                     -> io::Result<Option<ShellSignal>>
+                     -> Result<Option<ShellSignal>, ShellError>
 {
     let mut cmd = Command::new(path)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()?;
+        .spawn().map_err(|_| ShellError::ExecutionError)?;
 
     let mut stdout = cmd.stdout.take().unwrap();
     let mut stderr = cmd.stderr.take().unwrap();
@@ -98,9 +98,9 @@ pub fn call_external(_state: &ShellState, path: &Path, args: &[&str], output: &m
     drop(tx);
 
     for chunk in rx {
-        output.write_all(&chunk)?;
+        output.write_all(&chunk).map_err(|_| ShellError::OutputError)?;
     }
 
-    cmd.wait()?;
+    cmd.wait().map_err(|_| ShellError::ExecutionError)?;
     Ok(None)
 }

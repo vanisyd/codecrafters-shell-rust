@@ -6,11 +6,26 @@ use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::io::Error;
+use std::path::{PathBuf};
+use thiserror::Error;
 use crate::builtin::{call};
 
+#[derive(Error, Debug)]
+enum ShellError {
+    #[error("command not found")]
+    CommandNotFound,
+    #[error("invalid argument")]
+    InvalidArgument,
+    #[error("output error")]
+    OutputError,
+    #[error("command execution error")]
+    ExecutionError
+}
+
 enum ShellSignal {
-    Exit
+    Exit,
+    ChangeDir(PathBuf)
 }
 
 struct ShellState {
@@ -37,6 +52,7 @@ impl ShellState {
     pub fn update(&mut self, signal: ShellSignal) {
         match signal {
             ShellSignal::Exit => self.should_exit = true,
+            ShellSignal::ChangeDir(dir) => self.current_dir = dir
         }
     }
 }
@@ -46,7 +62,7 @@ fn main() {
 
     let mut input = String::new();
     while !state.should_exit {
-        print!("$ ");
+        print!("{} $ ", state.current_dir.display());
         io::stdout().flush().unwrap();
 
         io::stdin().read_line(&mut input).unwrap();
@@ -56,12 +72,21 @@ fn main() {
 
         if let Some(cmd_name) = parts.first() {
             let args: &[&str] = &parts[1..];
-            if let Ok(result) = call(&mut state, cmd_name, args, io::stdout().by_ref()) {
-                if let Some(signal) = result {
-                    state.update(signal);
+            let exec_result = call(&mut state, cmd_name, args, io::stdout().by_ref());
+            match exec_result {
+                Ok(result) => {
+                    if let Some(signal) = result {
+                        state.update(signal);
+                    }
+                },
+                Err(e) => {
+                    match e {
+                        ShellError::CommandNotFound => {
+                            println!("{}: command not found", cmd_name);
+                        },
+                        _ => {}
+                    }
                 }
-            } else {
-                println!("{cmd_name}: command not found");
             }
         }
 
