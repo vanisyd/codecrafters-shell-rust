@@ -1,13 +1,11 @@
 use std::fs::DirEntry;
-use std::{env, fs, io};
-use std::env::split_paths;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
-use std::string::ToString;
+use std::{env, fs, io};
 
 pub fn visit_dirs<T, R>(dir: &Path, cb: &mut T) -> io::Result<Option<R>>
 where
-    T: FnMut(&DirEntry) -> Option<R>
+    T: FnMut(&DirEntry) -> Option<R>,
 {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
@@ -22,14 +20,16 @@ where
             }
         }
     }
-    
+
     Ok(None)
 }
 
 pub fn is_executable(path: &Path) -> bool {
-    if path.is_file() && let Ok(metadata) = path.metadata() {
+    if path.is_file()
+        && let Ok(metadata) = path.metadata()
+    {
         if metadata.permissions().mode() & 0o111 != 0 {
-            return true
+            return true;
         }
     }
 
@@ -47,7 +47,7 @@ pub fn resolve_path(dir: &str, cur_dir: &Path) -> Result<PathBuf, ()> {
                 path = path.strip_prefix("~/").unwrap().to_path_buf();
                 PathBuf::from(home_dir.as_os_str())
             } else {
-                return Err(())
+                return Err(());
             }
         } else {
             cur_dir.to_owned()
@@ -60,10 +60,8 @@ pub fn resolve_path(dir: &str, cur_dir: &Path) -> Result<PathBuf, ()> {
                     if directory != Path::new("/") {
                         directory.pop();
                     }
-                },
-                _ => {
-                    directory.push(path_part)
                 }
+                _ => directory.push(path_part),
             };
         }
 
@@ -77,7 +75,7 @@ pub fn resolve_path(dir: &str, cur_dir: &Path) -> Result<PathBuf, ()> {
             } else {
                 Err(())
             }
-        },
-        Err(_) => Err(())
+        }
+        Err(_) => Err(()),
     }
 }

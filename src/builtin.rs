@@ -1,16 +1,19 @@
-use std::result::Result::Err;
-use std::{env, io};
-use std::io::{ErrorKind, Write};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
-use crate::{ShellError, ShellSignal, ShellState};
 use crate::external::{call_external, find_external, get_external};
 use crate::helper::resolve_path;
+use crate::lexer::ParsedCommand;
+use crate::{ShellError, ShellSignal, ShellState};
+use std::io::Write;
+use std::path::PathBuf;
+use std::result::Result::Err;
 
 pub trait ShellCommand: Sync {
     fn name(&self) -> &'static str;
-    fn exec(&self, state: &ShellState, args: &[&str], output: &mut dyn Write)
-        -> Result<Option<ShellSignal>, ShellError>;
+    fn exec<'a>(
+        &self,
+        state: &ShellState,
+        args: &mut dyn Iterator<Item = &'a str>,
+        output: &mut dyn Write,
+    ) -> Result<Option<ShellSignal>, ShellError>;
 }
 
 pub struct Echo;
@@ -20,10 +23,19 @@ impl ShellCommand for Echo {
         "echo"
     }
 
-    fn exec(&self, _state: &ShellState, args: &[&str], output: &mut dyn Write)
-        -> Result<Option<ShellSignal>, ShellError>
-    {
-        writeln!(output, "{}", args.join(" ")).map_err(|_| ShellError::OutputError)?;
+    fn exec<'a>(
+        &self,
+        _state: &ShellState,
+        args: &mut dyn Iterator<Item = &'a str>,
+        output: &mut dyn Write,
+    ) -> Result<Option<ShellSignal>, ShellError> {
+        for (i, arg) in args.enumerate() {
+            if i > 0 {
+                write!(output, " ").map_err(|_| ShellError::OutputError)?;
+            }
+            write!(output, "{}", arg).map_err(|_| ShellError::OutputError)?;
+        }
+        write!(output, "\n").map_err(|_| ShellError::OutputError)?;
 
         Ok(None)
     }
@@ -36,9 +48,12 @@ impl ShellCommand for Exit {
         "exit"
     }
 
-    fn exec(&self, _state: &ShellState, _args: &[&str], _output: &mut dyn Write)
-            -> Result<Option<ShellSignal>, ShellError>
-    {
+    fn exec<'a>(
+        &self,
+        _state: &ShellState,
+        _args: &mut dyn Iterator<Item = &'a str>,
+        _output: &mut dyn Write,
+    ) -> Result<Option<ShellSignal>, ShellError> {
         Ok(Some(ShellSignal::Exit))
     }
 }
@@ -50,26 +65,27 @@ impl ShellCommand for TypeCmd {
         "type"
     }
 
-    fn exec(&self, _state: &ShellState, args: &[&str], output: &mut dyn Write)
-            -> Result<Option<ShellSignal>, ShellError>
-    {
-        'arg_loop: for &arg in args {
-            let builtin = BUILTINS.iter().
-                find(|cmd| cmd.name() == arg);
+    fn exec<'a>(
+        &self,
+        _state: &ShellState,
+        args: &mut dyn Iterator<Item = &'a str>,
+        output: &mut dyn Write,
+    ) -> Result<Option<ShellSignal>, ShellError> {
+        'arg_loop: for arg in args {
+            let builtin = BUILTINS.iter().find(|cmd| cmd.name() == arg);
             if builtin.is_some() {
                 writeln!(output, "{} is a shell builtin", arg)
                     .map_err(|_| ShellError::OutputError)?;
-                continue 'arg_loop
+                continue 'arg_loop;
             }
 
             if let Some(external) = find_external(arg, None) {
                 writeln!(output, "{} is {}", arg, external.display())
                     .map_err(|_| ShellError::OutputError)?;
-                continue 'arg_loop
+                continue 'arg_loop;
             }
 
-            writeln!(output, "{}: not found", arg)
-                .map_err(|_| ShellError::OutputError)?;
+            writeln!(output, "{}: not found", arg).map_err(|_| ShellError::OutputError)?;
         }
 
         Ok(None)
@@ -83,11 +99,13 @@ impl ShellCommand for Pwd {
         "pwd"
     }
 
-    fn exec(&self, state: &ShellState, _args: &[&str], output: &mut dyn Write)
-        -> Result<Option<ShellSignal>, ShellError>
-    {
-        writeln!(output, "{}", state.current_dir.display())
-            .map_err(|_| ShellError::OutputError)?;
+    fn exec<'a>(
+        &self,
+        state: &ShellState,
+        _args: &mut dyn Iterator<Item = &'a str>,
+        output: &mut dyn Write,
+    ) -> Result<Option<ShellSignal>, ShellError> {
+        writeln!(output, "{}", state.current_dir.display()).map_err(|_| ShellError::OutputError)?;
         Ok(None)
     }
 }
@@ -99,63 +117,77 @@ impl ShellCommand for Cd {
         "cd"
     }
 
-    fn exec(&self, state: &ShellState, args: &[&str], output: &mut dyn Write)
-        -> Result<Option<ShellSignal>, ShellError>
-    {
-        if args.len() > 1 {
+    fn exec<'a>(
+        &self,
+        state: &ShellState,
+        args: &mut dyn Iterator<Item = &'a str>,
+        output: &mut dyn Write,
+    ) -> Result<Option<ShellSignal>, ShellError> {
+        let dir = args.next().unwrap_or("");
+        if args.next().is_some() {
             writeln!(output, "{}: too many arguments", self.name())
                 .map_err(|_| ShellError::OutputError)?;
-            return Err(ShellError::InvalidArgument)
+            return Err(ShellError::InvalidArgument);
         }
 
-        if let Ok(path) = resolve_path(args[0], &state.current_dir) {
+        if let Ok(path) = resolve_path(dir, &state.current_dir) {
             Ok(Some(ShellSignal::ChangeDir(path)))
         } else {
-            writeln!(output, "{}: {}: No such file or directory", self.name(), args[0])
-                .map_err(|_| ShellError::OutputError)?;
+            writeln!(
+                output,
+                "{}: {}: No such file or directory",
+                self.name(),
+                dir
+            )
+            .map_err(|_| ShellError::OutputError)?;
             Err(ShellError::InvalidArgument)
         }
     }
 }
 
-static BUILTINS: &[&dyn ShellCommand] = &[
-    &ECHO,
-    &EXIT,
-    &TYPECMD,
-    &PWD,
-    &CD
-];
+static BUILTINS: &[&dyn ShellCommand] = &[&ECHO, &EXIT, &TYPECMD, &PWD, &CD];
 
-pub fn call_builtin(state: &ShellState, cmd: &dyn ShellCommand, args: &[&str], output: &mut dyn Write)
-                    -> Result<Option<ShellSignal>, ShellError>
-{
-    let signal = cmd.exec(state, args, output)?;
+pub fn call_builtin(
+    state: &ShellState,
+    cmd: &dyn ShellCommand,
+    command: &ParsedCommand,
+    output: &mut dyn Write,
+) -> Result<Option<ShellSignal>, ShellError> {
+    let mut args = command.args();
+    let signal = cmd.exec(state, &mut args, output)?;
     Ok(signal)
 }
 
-pub fn call(state: &ShellState, name: &str, args: &[&str], output: &mut dyn Write)
-    -> Result<Option<ShellSignal>, ShellError>
-{
-    if let Some(tst) = call_test(state, name, args, output) {
+pub fn call(
+    state: &ShellState,
+    command: &ParsedCommand,
+    output: &mut dyn Write,
+) -> Result<Option<ShellSignal>, ShellError> {
+    /*if let Some(tst) = call_test(state, name, args, output) {
         return tst
-    }
+    }*/
+    if let Some(cmd_name) = command.cmd() {
+        let builtin = BUILTINS.iter().find(|cmd| cmd.name() == cmd_name);
+        if let Some(&cmd) = builtin {
+            return call_builtin(state, cmd, command, output);
+        }
 
-    let builtin = BUILTINS.iter().find(|cmd| cmd.name() == name);
-    if let Some(&cmd) = builtin {
-        return call_builtin(state, cmd, args, output);
-    }
-
-    let external = get_external(name, None);
-    if let Some(cmd) = external {
-        return call_external(state, &cmd, args, output);
+        let external = get_external(cmd_name, None);
+        let mut args = command.args();
+        if let Some(cmd) = external {
+            return call_external(state, &cmd, &mut args, output);
+        }
     }
 
     Err(ShellError::CommandNotFound)
 }
 
-fn call_test(_state: &ShellState, name: &str, _args: &[&str], output: &mut dyn Write)
-    -> Option<Result<Option<ShellSignal>, ShellError>>
-{
+fn call_test(
+    _state: &ShellState,
+    name: &str,
+    _args: &[&str],
+    output: &mut dyn Write,
+) -> Option<Result<Option<ShellSignal>, ShellError>> {
     if name == "q" {
         let dir = PathBuf::from("../");
         writeln!(output, "{:?}", dir.is_relative()).unwrap();

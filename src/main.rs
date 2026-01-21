@@ -1,15 +1,16 @@
 mod builtin;
-mod helper;
 mod external;
+mod helper;
+mod lexer;
 
+use crate::builtin::call;
+use crate::lexer::parse_command;
 use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use std::io::{self, Write};
-use std::io::Error;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use thiserror::Error;
-use crate::builtin::{call};
 
 #[derive(Error, Debug)]
 enum ShellError {
@@ -20,17 +21,17 @@ enum ShellError {
     #[error("output error")]
     OutputError,
     #[error("command execution error")]
-    ExecutionError
+    ExecutionError,
 }
 
 enum ShellSignal {
     Exit,
-    ChangeDir(PathBuf)
+    ChangeDir(PathBuf),
 }
 
 struct ShellState {
     current_dir: PathBuf,
-    should_exit: bool
+    should_exit: bool,
 }
 
 impl Default for ShellState {
@@ -43,7 +44,7 @@ impl Default for ShellState {
 
         Self {
             current_dir,
-            should_exit: false
+            should_exit: false,
         }
     }
 }
@@ -52,7 +53,7 @@ impl ShellState {
     pub fn update(&mut self, signal: ShellSignal) {
         match signal {
             ShellSignal::Exit => self.should_exit = true,
-            ShellSignal::ChangeDir(dir) => self.current_dir = dir
+            ShellSignal::ChangeDir(dir) => self.current_dir = dir,
         }
     }
 }
@@ -68,25 +69,22 @@ fn main() {
         io::stdin().read_line(&mut input).unwrap();
         input = input.trim().to_string();
 
-        let parts: Vec<&str> = input.split_whitespace().collect();
+        let parsed_cmd = parse_command(&input);
 
-        if let Some(cmd_name) = parts.first() {
-            let args: &[&str] = &parts[1..];
-            let exec_result = call(&mut state, cmd_name, args, io::stdout().by_ref());
+        if let Some(cmd_name) = parsed_cmd.cmd() {
+            let exec_result = call(&mut state, &parsed_cmd, io::stdout().by_ref());
             match exec_result {
                 Ok(result) => {
                     if let Some(signal) = result {
                         state.update(signal);
                     }
-                },
-                Err(e) => {
-                    match e {
-                        ShellError::CommandNotFound => {
-                            println!("{}: command not found", cmd_name);
-                        },
-                        _ => {}
-                    }
                 }
+                Err(e) => match e {
+                    ShellError::CommandNotFound => {
+                        println!("{}: command not found", cmd_name);
+                    }
+                    _ => {}
+                },
             }
         }
 
