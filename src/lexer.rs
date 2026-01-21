@@ -1,3 +1,6 @@
+static NORMAL_MODE_ESCAPE_CHARS: [char; 5] = ['\'', '"', '$', '*', '?'];
+static DOUBLE_Q_MODE_ESCAPE_CHARS: [char; 4] = ['"', '\\', '$', '`'];
+
 enum LexerMode {
     Normal,
     SingleQuote,
@@ -37,6 +40,8 @@ impl ParsedCommand {
     }
 }
 
+fn escape(cmd: &mut ParsedCommand, c: char, mode: LexerMode) {}
+
 pub fn parse_command(string: &str) -> ParsedCommand {
     let mut cmd = ParsedCommand::default();
 
@@ -45,6 +50,11 @@ pub fn parse_command(string: &str) -> ParsedCommand {
     for c in string.chars() {
         match mode {
             LexerMode::Escape => {
+                if !matches!(prev_mode, LexerMode::Normal)
+                    && !(matches!(prev_mode, LexerMode::DoubleQuote) && DOUBLE_Q_MODE_ESCAPE_CHARS.contains(&c))
+                {
+                    cmd.push_char('\\');
+                }
                 cmd.push_char(c);
                 mode = prev_mode;
                 prev_mode = LexerMode::Escape;
