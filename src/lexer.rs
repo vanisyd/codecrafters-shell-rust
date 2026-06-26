@@ -163,7 +163,7 @@ impl<'a> Parser<'a> {
                         self.parse(&mut dest, None);
                         self._output = Some(Output::Redirect { dest, rewrite });
 
-                        true
+                        false
                     }
                     CH_REDIRECT_PREFIX => {
                         if let Some((_, next_c)) = self.iter.peek() {
