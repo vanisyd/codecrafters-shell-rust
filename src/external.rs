@@ -6,6 +6,11 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::{env, io, thread};
 
+enum Stream {
+    Stdout(Vec<u8>),
+    Stderr(Vec<u8>),
+}
+
 pub fn find_external(name: &str, path: Option<PathBuf>) -> Option<PathBuf> {
     let mut app_path: PathBuf = path.unwrap_or_else(|| PathBuf::from("/"));
 
@@ -65,18 +70,20 @@ pub fn call_external<'a>(
     path: &Path,
     args: &mut dyn Iterator<Item = &'a str>,
     output: &mut dyn Write,
+    error_output: &mut dyn Write,
 ) -> Result<Option<ShellSignal>, ShellError> {
     let mut cmd = Command::new(path)
         .args(args)
         .current_dir(state.current_dir.to_path_buf())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| ShellError::ExecutionError)?;
 
     let mut stdout = cmd.stdout.take().unwrap();
     let mut stderr = cmd.stderr.take().unwrap();
 
-    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    let (tx, rx) = mpsc::channel::<Stream>();
 
     {
         let tx = tx.clone();
@@ -86,7 +93,7 @@ pub fn call_external<'a>(
                 if n == 0 {
                     break;
                 }
-                tx.send(buf[..n].to_vec()).unwrap();
+                tx.send(Stream::Stdout(buf[..n].to_vec())).unwrap();
             }
         });
     }
@@ -99,16 +106,26 @@ pub fn call_external<'a>(
                 if n == 0 {
                     break;
                 }
-                tx.send(buf[..n].to_vec()).unwrap();
+                tx.send(Stream::Stderr(buf[..n].to_vec())).unwrap();
             }
         });
     }
     drop(tx);
 
     for chunk in rx {
-        output
-            .write_all(&chunk)
-            .map_err(|_| ShellError::OutputError)?;
+        match chunk {
+            Stream::Stdout(bytes) => {
+                output
+                    .write_all(&bytes)
+                    .map_err(|_| ShellError::OutputError)?;
+            },
+            Stream::Stderr(bytes) => {
+                error_output
+                    .write_all(&bytes)
+                    .map_err(|_| ShellError::OutputError)?
+            }
+        }
+
     }
 
     cmd.wait().map_err(|_| ShellError::ExecutionError)?;

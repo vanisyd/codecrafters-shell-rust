@@ -162,6 +162,7 @@ pub fn call(
     state: &ShellState,
     command: &ParsedCommand,
     output: &mut dyn Write,
+    error_output: &mut dyn Write,
 ) -> Result<Option<ShellSignal>, ShellError> {
     /*if let Some(tst) = call_test(state, name, args, output) {
         return tst
@@ -175,7 +176,7 @@ pub fn call(
         let external = get_external(cmd_name, None);
         let mut args = command.args();
         if let Some(cmd) = external {
-            return call_external(state, &cmd, &mut args, output);
+            return call_external(state, &cmd, &mut args, output, error_output);
         }
     }
 

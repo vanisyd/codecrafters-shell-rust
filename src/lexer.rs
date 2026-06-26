@@ -73,6 +73,7 @@ pub struct ParsedCommand {
     arena: String,
     args: Vec<std::ops::Range<usize>>,
     output: Output,
+    error_output: Output,
 }
 
 impl ParsedCommand {
@@ -84,8 +85,8 @@ impl ParsedCommand {
         self.arena.get(self.args.first().unwrap().clone())
     }
 
-    pub fn output(&self) -> &Output {
-        &self.output
+    pub fn output(&self) -> (&Output, &Output) {
+        (&self.output, &self.error_output)
     }
 }
 

@@ -4,7 +4,7 @@ mod helper;
 mod lexer;
 
 use crate::builtin::call;
-use crate::lexer::{Parser};
+use crate::lexer::{OutputWriter, ParsedCommand, Parser};
 use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
@@ -23,6 +23,8 @@ enum ShellError {
     OutputError,
     #[error("command execution error")]
     ExecutionError,
+    #[error(transparent)]
+    Unknown(#[from] anyhow::Error),
 }
 
 enum ShellSignal {
@@ -73,33 +75,31 @@ fn main() {
         let mut parser = Parser::new(&input);
         let parsed_cmd = parser.parse_command();
 
-        if let Some(cmd_name) = parsed_cmd.cmd() {
-            match parsed_cmd.output().as_writer() {
-                Ok(mut writer) => {
-                    let exec_result = call(&mut state, &parsed_cmd, &mut writer);
-                    match exec_result {
-                        Ok(result) => {
-                            if let Some(signal) = result {
-                                state.update(signal);
-                            }
-                        }
-                        Err(e) => match e {
-                            ShellError::CommandNotFound => {
-                                println!("{}: {}", cmd_name, e.to_string());
-                            }
-                            _ => {}
-                        },
-                    }
-                },
-                Err(e) => {
-                    println!("{e}")
-                }
-            };
-
-
+        match execute_cmd(&mut state, parsed_cmd) {
+            Ok(_) => {},
+            Err(e) => {
+                println!("{e}")
+            }
         }
 
         io::stdout().flush().unwrap();
         input.clear();
     }
+}
+
+fn execute_cmd(mut state: &mut ShellState, cmd: ParsedCommand) -> Result<Option<ShellSignal>, ShellError> {
+    {
+        let (stdout, stderr) = cmd.output();
+        let (mut stdout_writer, mut stderr_writer) = match (stdout.as_writer(), stderr.as_writer()) {
+            (Ok(stdout), Ok(stderr)) => (stdout, stderr),
+            (Err(e), _) | (_, Err(e)) => return Err(ShellError::Unknown(anyhow::anyhow!(e))),
+        };
+
+        let signal = call(&mut state, &cmd, &mut stdout_writer, &mut stderr_writer)?;
+        if let Some(signal) = signal {
+            state.update(signal);
+        }
+    }
+
+    Ok(None)
 }
