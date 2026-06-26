@@ -79,3 +79,17 @@ pub fn resolve_path(dir: &str, cur_dir: &Path) -> Result<PathBuf, ()> {
         Err(_) => Err(()),
     }
 }
+
+pub fn file_into_output(path: &Path, rewrite: bool) -> Result<fs::File, String> {
+    let file = fs::File::options()
+        .write(rewrite)
+        .append(!rewrite)
+        .truncate(rewrite)
+        .create(true)
+        .open(path);
+
+    match file {
+        Ok(file) => Ok(file),
+        Err(e) => Err(format!("{}", e)),
+    }
+}

@@ -4,12 +4,13 @@ mod helper;
 mod lexer;
 
 use crate::builtin::call;
-use crate::lexer::parse_command;
+use crate::lexer::{Parser};
 use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::io::Stdout;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -69,23 +70,33 @@ fn main() {
         io::stdin().read_line(&mut input).unwrap();
         input = input.trim().to_string();
 
-        let parsed_cmd = parse_command(&input);
+        let mut parser = Parser::new(&input);
+        let parsed_cmd = parser.parse_command();
 
         if let Some(cmd_name) = parsed_cmd.cmd() {
-            let exec_result = call(&mut state, &parsed_cmd, io::stdout().by_ref());
-            match exec_result {
-                Ok(result) => {
-                    if let Some(signal) = result {
-                        state.update(signal);
+            match parsed_cmd.output().as_writer() {
+                Ok(mut writer) => {
+                    let exec_result = call(&mut state, &parsed_cmd, &mut writer);
+                    match exec_result {
+                        Ok(result) => {
+                            if let Some(signal) = result {
+                                state.update(signal);
+                            }
+                        }
+                        Err(e) => match e {
+                            ShellError::CommandNotFound => {
+                                println!("{}: {}", cmd_name, e.to_string());
+                            }
+                            _ => {}
+                        },
                     }
-                }
-                Err(e) => match e {
-                    ShellError::CommandNotFound => {
-                        println!("{}: command not found", cmd_name);
-                    }
-                    _ => {}
                 },
-            }
+                Err(e) => {
+                    println!("{e}")
+                }
+            };
+
+
         }
 
         io::stdout().flush().unwrap();

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <targets>
+      <target name="vanisyd@192.168.0.204:22" type="ssh/sftp" uuid="bbb814f4-52e8-447f-96ca-9218e4b7f9e9">
+        <config>
+          <option name="projectRootOnTarget" value="/home/vanisyd/Dev/Projects/codecrafters-shell-rust" />
+          <option name="serverName" value="vanisyd@192.168.0.204:22 agent" />
+          <option name="useRsync" value="true" />
+        </config>
+        <ContributedStateBase type="RsLanguageRuntime">
+          <config>
+            <option name="cargoPath" value="/home/vanisyd/.cargo/bin/cargo" />
+            <option name="cargoVersion" value="1.96.0 (30a34c682 2026-05-25)" />
+            <option name="rustcPath" value="/home/vanisyd/.cargo/bin/rustc" />
+            <option name="rustcVersion" value="1.96.0 (ac68faa20 2026-05-25)" />
+          </config>
+        </ContributedStateBase>
+      </target>
+    </targets>
+  </component>
+</project>
