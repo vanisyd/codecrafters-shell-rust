@@ -70,7 +70,6 @@ pub fn call_external<'a>(
         .args(args)
         .current_dir(state.current_dir.to_path_buf())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| ShellError::ExecutionError)?;
 
