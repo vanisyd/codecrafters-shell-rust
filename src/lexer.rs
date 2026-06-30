@@ -162,6 +162,7 @@ impl<'a> Parser<'a> {
                         );
                         self.parse(&mut dest, None);
                         self._output = Some(Output::Redirect { dest, rewrite });
+                        word_start = None;
 
                         false
                     }
