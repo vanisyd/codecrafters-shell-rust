@@ -95,7 +95,6 @@ pub struct Parser<'a> {
     iter: Peekable<CharIndices<'a>>,
     mode: LexerMode,
     _output: Option<Output>,
-    _word_start: Option<usize>
 }
 
 impl<'a> Parser<'a> {
@@ -105,7 +104,6 @@ impl<'a> Parser<'a> {
             iter: input.char_indices().peekable(),
             mode: LexerMode::Normal,
             _output: None,
-            _word_start: None,
         }
     }
 
@@ -118,29 +116,36 @@ impl<'a> Parser<'a> {
     }
 
     fn parse(&mut self, arena: &mut String, mut args: Option<&mut Vec<std::ops::Range<usize>>>) {
+        let mut word_start: Option<usize> = None;
+
         let mut prev_mode: Option<LexerMode> = None;
         while let Some((_, c)) = self.iter.next() {
             let end_of_token = match self.mode {
                 LexerMode::Normal => match c {
                     CH_SPACE => true,
                     CH_ESCAPE => {
-                        self.start_token(arena);
+                        if word_start.is_none() {
+                            word_start = Some(arena.len());
+                        }
                         prev_mode = Some(self.mode);
                         self.mode = LexerMode::Escape;
                         false
                     }
                     CH_DOUBLE_QUOTE => {
-                        self.start_token(arena);
+                        if word_start.is_none() {
+                            word_start = Some(arena.len());
+                        }
                         self.mode = LexerMode::DoubleQuote;
                         false
                     }
                     CH_SINGLE_QUOTE => {
-                        self.start_token(arena);
+                        if word_start.is_none() {
+                            word_start = Some(arena.len());
+                        }
                         self.mode = LexerMode::SingleQuote;
                         false
                     }
                     CH_REDIRECT => {
-                        self.start_token(arena);
                         let mut rewrite = true;
                         while let Some((_, next_c)) = self.iter.peek() {
                             if next_c.is_whitespace() {
@@ -156,7 +161,7 @@ impl<'a> Parser<'a> {
                         }
 
                         let mut dest = String::with_capacity(
-                            (self._word_start.take().unwrap_or(0)..self.input.len()).len(),
+                            (word_start.take().unwrap_or(0)..self.input.len()).len(),
                         );
                         self.parse(&mut dest, None);
                         self._output = Some(Output::Redirect { dest, rewrite });
@@ -166,27 +171,27 @@ impl<'a> Parser<'a> {
                     CH_REDIRECT_PREFIX => {
                         if let Some((_, next_c)) = self.iter.peek() {
                             if !next_c.eq_ignore_ascii_case(&CH_REDIRECT) {
-                                self.push_char(arena, c);
+                                self.push_char(&mut word_start, arena, c);
                             }
                         } else {
-                            self.push_char(arena, c);
+                            self.push_char(&mut word_start, arena, c);
                         }
 
                         false
                     }
                     _ => {
-                        self.push_char(arena, c);
+                        self.push_char(&mut word_start, arena, c);
                         false
                     }
                 },
                 LexerMode::Escape => {
-
                     if !matches!(prev_mode, Some(LexerMode::Normal))
                         && !(matches!(prev_mode, Some(LexerMode::DoubleQuote))
                             && DOUBLE_Q_MODE_ESCAPE_CHARS.contains(&c))
                     {
-                        self.push_char(arena, c);
+                        self.push_char(&mut word_start, arena, CH_ESCAPE);
                     }
+                    self.push_char(&mut word_start, arena, c);
                     self.mode = prev_mode.unwrap_or(LexerMode::Normal);
                     prev_mode = None;
                     false
@@ -195,7 +200,7 @@ impl<'a> Parser<'a> {
                     if c == CH_SINGLE_QUOTE {
                         self.mode = LexerMode::Normal;
                     } else {
-                        self.push_char(arena, c);
+                        self.push_char(&mut word_start, arena, c);
                     }
                     false
                 }
@@ -206,39 +211,30 @@ impl<'a> Parser<'a> {
                         self.mode = LexerMode::Escape;
                         prev_mode = Some(LexerMode::DoubleQuote);
                     } else {
-                        self.push_char(arena, c);
+                        self.push_char(&mut word_start, arena, c);
                     }
                     false
                 }
             };
 
             if end_of_token && let Some(ref mut args) = args {
-                if let Some(ws) = self._word_start {
-                    args.push((ws..arena.len()));
-                    self.end_token();
+                if let Some(ws) = word_start.take() {
+                    args.push(ws..arena.len());
                 }
             }
         }
 
         if let Some(ref mut args) = args
-            && let Some(word_start) = self._word_start
+            && let Some(ws) = word_start
         {
-            args.push(word_start..arena.len());
+            args.push(ws..arena.len());
         }
     }
 
-    fn push_char(&mut self, arena: &mut String, c: char) {
-        self.start_token(arena);
+    fn push_char(&mut self, word_start: &mut Option<usize>, arena: &mut String, c: char) {
+        if word_start.is_none() {
+            *word_start = Some(arena.len());
+        }
         arena.push(c);
-    }
-
-    fn start_token(&mut self, arena: &String) {
-        if self._word_start.is_none() {
-            self._word_start = Some(arena.len());
-        }
-    }
-
-    fn end_token(&mut self) {
-        self._word_start = None;
     }
 }
