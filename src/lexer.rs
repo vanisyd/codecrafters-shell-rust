@@ -95,7 +95,7 @@ pub struct Parser<'a> {
     iter: Peekable<CharIndices<'a>>,
     mode: LexerMode,
     _output: Option<Output>,
-    _iter_idx: usize,
+    _word_start: Option<usize>
 }
 
 impl<'a> Parser<'a> {
@@ -105,7 +105,7 @@ impl<'a> Parser<'a> {
             iter: input.char_indices().peekable(),
             mode: LexerMode::Normal,
             _output: None,
-            _iter_idx: 0,
+            _word_start: None,
         }
     }
 
@@ -118,31 +118,29 @@ impl<'a> Parser<'a> {
     }
 
     fn parse(&mut self, arena: &mut String, mut args: Option<&mut Vec<std::ops::Range<usize>>>) {
-        let mut word_start: Option<usize> = None;
-
         let mut prev_mode: Option<LexerMode> = None;
-        while let Some((idx, c)) = self.iter.next() {
-            if word_start.is_none() {
-                word_start = Some(arena.len());
-            }
-
+        while let Some((_, c)) = self.iter.next() {
             let end_of_token = match self.mode {
                 LexerMode::Normal => match c {
                     CH_SPACE => true,
                     CH_ESCAPE => {
+                        self.start_token(arena);
                         prev_mode = Some(self.mode);
                         self.mode = LexerMode::Escape;
                         false
                     }
                     CH_DOUBLE_QUOTE => {
+                        self.start_token(arena);
                         self.mode = LexerMode::DoubleQuote;
                         false
                     }
                     CH_SINGLE_QUOTE => {
+                        self.start_token(arena);
                         self.mode = LexerMode::SingleQuote;
                         false
                     }
                     CH_REDIRECT => {
+                        self.start_token(arena);
                         let mut rewrite = true;
                         while let Some((_, next_c)) = self.iter.peek() {
                             if next_c.is_whitespace() {
@@ -158,38 +156,37 @@ impl<'a> Parser<'a> {
                         }
 
                         let mut dest = String::with_capacity(
-                            (word_start.unwrap_or(0)..self.input.len()).len(),
+                            (self._word_start.take().unwrap_or(0)..self.input.len()).len(),
                         );
                         self.parse(&mut dest, None);
                         self._output = Some(Output::Redirect { dest, rewrite });
-                        word_start = None;
 
                         false
                     }
                     CH_REDIRECT_PREFIX => {
                         if let Some((_, next_c)) = self.iter.peek() {
                             if !next_c.eq_ignore_ascii_case(&CH_REDIRECT) {
-                                arena.push(c);
+                                self.push_char(arena, c);
                             }
                         } else {
-                            arena.push(c);
+                            self.push_char(arena, c);
                         }
 
                         false
                     }
                     _ => {
-                        arena.push(c);
+                        self.push_char(arena, c);
                         false
                     }
                 },
                 LexerMode::Escape => {
+
                     if !matches!(prev_mode, Some(LexerMode::Normal))
                         && !(matches!(prev_mode, Some(LexerMode::DoubleQuote))
                             && DOUBLE_Q_MODE_ESCAPE_CHARS.contains(&c))
                     {
-                        arena.push(CH_ESCAPE);
+                        self.push_char(arena, c);
                     }
-                    arena.push(c);
                     self.mode = prev_mode.unwrap_or(LexerMode::Normal);
                     prev_mode = None;
                     false
@@ -198,7 +195,7 @@ impl<'a> Parser<'a> {
                     if c == CH_SINGLE_QUOTE {
                         self.mode = LexerMode::Normal;
                     } else {
-                        arena.push(c);
+                        self.push_char(arena, c);
                     }
                     false
                 }
@@ -209,22 +206,39 @@ impl<'a> Parser<'a> {
                         self.mode = LexerMode::Escape;
                         prev_mode = Some(LexerMode::DoubleQuote);
                     } else {
-                        arena.push(c);
+                        self.push_char(arena, c);
                     }
                     false
                 }
             };
 
             if end_of_token && let Some(ref mut args) = args {
-                args.push((word_start.unwrap_or(0)..arena.len()));
-                word_start = None;
+                if let Some(ws) = self._word_start {
+                    args.push((ws..arena.len()));
+                    self.end_token();
+                }
             }
         }
 
         if let Some(ref mut args) = args
-            && let Some(word_start) = word_start
+            && let Some(word_start) = self._word_start
         {
             args.push(word_start..arena.len());
         }
+    }
+
+    fn push_char(&mut self, arena: &mut String, c: char) {
+        self.start_token(arena);
+        arena.push(c);
+    }
+
+    fn start_token(&mut self, arena: &String) {
+        if self._word_start.is_none() {
+            self._word_start = Some(arena.len());
+        }
+    }
+
+    fn end_token(&mut self) {
+        self._word_start = None;
     }
 }
