@@ -5,6 +5,7 @@ use crate::{ShellError, ShellSignal, ShellState};
 use std::io::Write;
 use std::path::PathBuf;
 use std::result::Result::Err;
+use anyhow::{anyhow, Error};
 
 pub trait ShellCommand: Sync {
     fn name(&self) -> &'static str;
@@ -178,9 +179,11 @@ pub fn call(
         if let Some(cmd) = external {
             return call_external(state, &cmd, &mut args, output, error_output);
         }
+
+        return Err(ShellError::CommandNotFound(command.cmd().unwrap().to_string()));
     }
 
-    Err(ShellError::CommandNotFound)
+    Err(ShellError::Unknown(anyhow!("error while getting command name")))
 }
 
 fn call_test(

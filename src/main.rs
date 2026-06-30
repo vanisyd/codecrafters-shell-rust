@@ -9,14 +9,13 @@ use std::env;
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use std::io::{self, Write};
-use std::io::Stdout;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 enum ShellError {
-    #[error("command not found")]
-    CommandNotFound,
+    #[error("{0}: command not found")]
+    CommandNotFound(String),
     #[error("invalid argument")]
     InvalidArgument,
     #[error("output error")]
@@ -78,7 +77,12 @@ fn main() {
         match execute_cmd(&mut state, parsed_cmd) {
             Ok(_) => {},
             Err(e) => {
-                println!("{e}")
+                match e {
+                    ShellError::CommandNotFound(e) => {
+                        println!("{}", e);
+                    },
+                    _ => {}
+                }
             }
         }
 
