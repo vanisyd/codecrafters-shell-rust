@@ -78,7 +78,7 @@ fn main() {
             Ok(_) => {},
             Err(e) => {
                 match e {
-                    ShellError::CommandNotFound(e) => {
+                    ShellError::CommandNotFound(_) => {
                         println!("{}", e);
                     },
                     _ => {}
