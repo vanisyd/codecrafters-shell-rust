@@ -14,6 +14,7 @@ const CH_DOUBLE_QUOTE: char = '"';
 const CH_SINGLE_QUOTE: char = '\'';
 const CH_SPACE: char = ' ';
 const CH_REDIRECT_PREFIX: char = '1';
+const CH_ERR_REDIRECT_PREFIX: char = '2';
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -95,6 +96,7 @@ pub struct Parser<'a> {
     iter: Peekable<CharIndices<'a>>,
     mode: LexerMode,
     _output: Option<Output>,
+    _err_output: Option<Output>
 }
 
 impl<'a> Parser<'a> {
@@ -104,6 +106,7 @@ impl<'a> Parser<'a> {
             iter: input.char_indices().peekable(),
             mode: LexerMode::Normal,
             _output: None,
+            _err_output: None,
         }
     }
 
@@ -111,6 +114,7 @@ impl<'a> Parser<'a> {
         let mut cmd = ParsedCommand::default();
         self.parse(&mut cmd.arena, Some(&mut cmd.args));
         cmd.output = self._output.take().unwrap_or_else(|| Output::Default);
+        cmd.error_output = self._err_output.take().unwrap_or_else(|| Output::Default);
 
         cmd
     }
@@ -119,6 +123,7 @@ impl<'a> Parser<'a> {
         let mut word_start: Option<usize> = None;
 
         let mut prev_mode: Option<LexerMode> = None;
+        let mut prev_c: Option<char> = None;
         while let Some((_, c)) = self.iter.next() {
             let end_of_token = match self.mode {
                 LexerMode::Normal => match c {
@@ -164,7 +169,12 @@ impl<'a> Parser<'a> {
                             (word_start.take().unwrap_or(0)..self.input.len()).len(),
                         );
                         self.parse(&mut dest, None);
-                        self._output = Some(Output::Redirect { dest, rewrite });
+
+                        if let Some(prev_c) = prev_c && prev_c.eq_ignore_ascii_case(&CH_ERR_REDIRECT_PREFIX) {
+                            self._err_output = Some(Output::Redirect { dest, rewrite });
+                        } else {
+                            self._output = Some(Output::Redirect { dest, rewrite });
+                        }
 
                         false
                     }
@@ -172,6 +182,19 @@ impl<'a> Parser<'a> {
                         if let Some((_, next_c)) = self.iter.peek() {
                             if !next_c.eq_ignore_ascii_case(&CH_REDIRECT) {
                                 self.push_char(&mut word_start, arena, c);
+                            }
+                        } else {
+                            self.push_char(&mut word_start, arena, c);
+                        }
+
+                        false
+                    }
+                    CH_ERR_REDIRECT_PREFIX => {
+                        if let Some((_, next_c)) = self.iter.peek() {
+                            if !next_c.eq_ignore_ascii_case(&CH_REDIRECT) {
+                                self.push_char(&mut word_start, arena, c);
+                            } else {
+                                prev_c = Some(c);
                             }
                         } else {
                             self.push_char(&mut word_start, arena, c);
